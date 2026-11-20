@@ -1,9 +1,10 @@
 namespace Veterinaria.Logica.Exceptions
 {
-    // Excepcion propia para las reglas de negocio.
-    // El controller la atrapa y devuelve un 400 (BadRequest) con el mensaje.
+    // se lanza cuando no se cumple una regla de negocio
     public class NegocioException : Exception
     {
-        public NegocioException(string mensaje) : base(mensaje) { }
+        public NegocioException(string mensaje) : base(mensaje)
+        {
+        }
     }
 }

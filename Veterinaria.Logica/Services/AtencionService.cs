@@ -6,16 +6,14 @@ using Veterinaria.Logica.Services.Interfaces;
 
 namespace Veterinaria.Logica.Services
 {
-    // Servicio de la transaccion principal: Registro de Atenciones
     public class AtencionService : IAtencionService
     {
         private readonly IAtencionRepository repo;
         private readonly IClienteRepository clienteRepo;
         private readonly IMascotaRepository mascotaRepo;
-        private readonly ICatalogoRepository<TipoAtencion> tipoRepo;
+        private readonly ITipoAtencionRepository tipoRepo;
 
-        public AtencionService(IAtencionRepository repo, IClienteRepository clienteRepo,
-                               IMascotaRepository mascotaRepo, ICatalogoRepository<TipoAtencion> tipoRepo)
+        public AtencionService(IAtencionRepository repo, IClienteRepository clienteRepo, IMascotaRepository mascotaRepo, ITipoAtencionRepository tipoRepo)
         {
             this.repo = repo;
             this.clienteRepo = clienteRepo;
@@ -23,52 +21,50 @@ namespace Veterinaria.Logica.Services
             this.tipoRepo = tipoRepo;
         }
 
-        public List<Atencion> GetAll(AtencionFiltroDto filtro)
+        public List<Atencion> GetAll(FiltroAtencionDto filtro)
         {
-            if (filtro.Desde.HasValue && filtro.Hasta.HasValue && filtro.Desde > filtro.Hasta)
+            if (filtro.Desde != null && filtro.Hasta != null && filtro.Desde > filtro.Hasta)
             {
-                throw new NegocioException("La fecha 'desde' no puede ser mayor que la fecha 'hasta'.");
+                throw new NegocioException("La fecha desde no puede ser mayor a la fecha hasta.");
             }
-            return repo.GetByFiltro(filtro);
+            return repo.GetAll(filtro);
         }
 
-        public Atencion GetById(int id)
+        public Atencion? GetById(int id)
         {
-            Atencion? atencion = repo.GetById(id);
-            if (atencion == null)
-            {
-                throw new NoEncontradoException($"No existe la atención con id {id}.");
-            }
-            return atencion;
+            return repo.GetById(id);
         }
 
         public Atencion Crear(AtencionDto dto)
         {
-            Atencion atencion = new Atencion(0, dto.IdMascota, dto.IdTipoAtencion, dto.Fecha,
-                                             (dto.Descripcion ?? string.Empty).Trim(), dto.Importe);
+            Atencion atencion = new Atencion(0, dto.IdMascota, dto.IdTipoAtencion, dto.Fecha, dto.Descripcion.Trim(), dto.Importe);
             atencion.Validar();
-            ValidarRelaciones(dto);
+            ValidarDatos(dto);
 
             repo.Add(atencion);
-            return GetById(atencion.Id);
+            return repo.GetById(atencion.Id)!;
         }
 
-        public Atencion Modificar(int id, AtencionDto dto)
+        public Atencion? Modificar(int id, AtencionDto dto)
         {
-            Atencion atencion = GetById(id);
-
-            if (!atencion.Activo)
+            Atencion? atencion = repo.GetById(id);
+            if (atencion == null)
             {
-                throw new NegocioException("No se puede modificar una atención dada de baja.");
+                return null;
+            }
+
+            if (atencion.Activo == false)
+            {
+                throw new NegocioException("No se puede modificar una atencion dada de baja.");
             }
 
             atencion.IdMascota = dto.IdMascota;
             atencion.IdTipoAtencion = dto.IdTipoAtencion;
             atencion.Fecha = dto.Fecha;
-            atencion.Descripcion = (dto.Descripcion ?? string.Empty).Trim();
+            atencion.Descripcion = dto.Descripcion.Trim();
             atencion.Importe = dto.Importe;
             atencion.Validar();
-            ValidarRelaciones(dto);
+            ValidarDatos(dto);
 
             atencion.Mascota = mascotaRepo.GetById(dto.IdMascota);
             atencion.TipoAtencion = tipoRepo.GetById(dto.IdTipoAtencion);
@@ -77,50 +73,61 @@ namespace Veterinaria.Logica.Services
             return atencion;
         }
 
-        public void DarDeBaja(int id)
+        public bool DarDeBaja(int id)
         {
-            Atencion atencion = GetById(id);
-            atencion.DarDeBaja();
-            repo.Update(atencion);
-        }
-
-        public void Reactivar(int id)
-        {
-            Atencion atencion = GetById(id);
-
-            if (atencion.Mascota != null && !atencion.Mascota.Activo)
+            Atencion? atencion = repo.GetById(id);
+            if (atencion == null)
             {
-                throw new NegocioException("No se puede reactivar la atención porque la mascota está dada de baja.");
+                return false;
             }
 
-            atencion.Reactivar();
+            atencion.Activo = false;
             repo.Update(atencion);
+            return true;
         }
 
-        // Validaciones del backend: no confiamos solo en lo que filtra el formulario
-        private void ValidarRelaciones(AtencionDto dto)
+        public bool Reactivar(int id)
+        {
+            Atencion? atencion = repo.GetById(id);
+            if (atencion == null)
+            {
+                return false;
+            }
+
+            if (atencion.Mascota != null && atencion.Mascota.Activo == false)
+            {
+                throw new NegocioException("No se puede reactivar la atencion porque la mascota esta dada de baja.");
+            }
+
+            atencion.Activo = true;
+            repo.Update(atencion);
+            return true;
+        }
+
+        // se valida tambien en el backend, no solo en el formulario
+        private void ValidarDatos(AtencionDto dto)
         {
             Cliente? cliente = clienteRepo.GetById(dto.IdCliente);
-            if (cliente == null || !cliente.Activo)
+            if (cliente == null || cliente.Activo == false)
             {
-                throw new NegocioException("El cliente seleccionado no existe o está dado de baja.");
+                throw new NegocioException("El cliente no existe o esta dado de baja.");
             }
 
             Mascota? mascota = mascotaRepo.GetById(dto.IdMascota);
-            if (mascota == null || !mascota.Activo)
+            if (mascota == null || mascota.Activo == false)
             {
-                throw new NegocioException("La mascota seleccionada no existe o está dada de baja.");
+                throw new NegocioException("La mascota no existe o esta dada de baja.");
             }
 
             if (!mascota.PerteneceA(cliente.Id))
             {
-                throw new NegocioException($"La mascota {mascota.Nombre} no pertenece al cliente {cliente.NombreCompleto}.");
+                throw new NegocioException("La mascota " + mascota.Nombre + " no pertenece al cliente " + cliente.Apellido + ", " + cliente.Nombre + ".");
             }
 
             TipoAtencion? tipo = tipoRepo.GetById(dto.IdTipoAtencion);
-            if (tipo == null || !tipo.Activo)
+            if (tipo == null || tipo.Activo == false)
             {
-                throw new NegocioException("El tipo de atención seleccionado no existe o está dado de baja.");
+                throw new NegocioException("El tipo de atencion no existe o esta dado de baja.");
             }
         }
     }

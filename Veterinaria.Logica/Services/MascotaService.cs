@@ -10,9 +10,9 @@ namespace Veterinaria.Logica.Services
     {
         private readonly IMascotaRepository repo;
         private readonly IClienteRepository clienteRepo;
-        private readonly ICatalogoRepository<TipoMascota> tipoRepo;
+        private readonly ITipoMascotaRepository tipoRepo;
 
-        public MascotaService(IMascotaRepository repo, IClienteRepository clienteRepo, ICatalogoRepository<TipoMascota> tipoRepo)
+        public MascotaService(IMascotaRepository repo, IClienteRepository clienteRepo, ITipoMascotaRepository tipoRepo)
         {
             this.repo = repo;
             this.clienteRepo = clienteRepo;
@@ -21,40 +21,40 @@ namespace Veterinaria.Logica.Services
 
         public List<Mascota> GetAll(int? idCliente, int? idTipoMascota, string? nombre, bool incluirInactivos)
         {
-            return repo.GetByFiltro(idCliente, idTipoMascota, nombre, incluirInactivos);
+            return repo.GetAll(idCliente, idTipoMascota, nombre, incluirInactivos);
         }
 
-        public Mascota GetById(int id)
+        public Mascota? GetById(int id)
         {
-            Mascota? mascota = repo.GetById(id);
-            if (mascota == null)
-            {
-                throw new NoEncontradoException($"No existe la mascota con id {id}.");
-            }
-            return mascota;
+            return repo.GetById(id);
         }
 
         public Mascota Crear(MascotaDto dto)
         {
-            Mascota mascota = new Mascota(0, (dto.Nombre ?? string.Empty).Trim(), dto.Edad, dto.IdTipoMascota, dto.IdCliente);
+            Mascota mascota = new Mascota(0, dto.Nombre.Trim(), dto.Edad, dto.IdTipoMascota, dto.IdCliente);
             mascota.Validar();
-            ValidarRelaciones(mascota);
+            ValidarClienteYTipo(dto.IdCliente, dto.IdTipoMascota);
 
             repo.Add(mascota);
-            return GetById(mascota.Id);
+            return repo.GetById(mascota.Id)!;
         }
 
-        public Mascota Modificar(int id, MascotaDto dto)
+        public Mascota? Modificar(int id, MascotaDto dto)
         {
-            Mascota mascota = GetById(id);
-            mascota.Nombre = (dto.Nombre ?? string.Empty).Trim();
+            Mascota? mascota = repo.GetById(id);
+            if (mascota == null)
+            {
+                return null;
+            }
+
+            mascota.Nombre = dto.Nombre.Trim();
             mascota.Edad = dto.Edad;
             mascota.IdTipoMascota = dto.IdTipoMascota;
             mascota.IdCliente = dto.IdCliente;
             mascota.Validar();
-            ValidarRelaciones(mascota);
+            ValidarClienteYTipo(dto.IdCliente, dto.IdTipoMascota);
 
-            // Actualizamos tambien las navegaciones para que EF no se confunda con las FK
+            // actualizo tambien los objetos relacionados para que coincidan con los id
             mascota.Cliente = clienteRepo.GetById(dto.IdCliente);
             mascota.TipoMascota = tipoRepo.GetById(dto.IdTipoMascota);
 
@@ -62,39 +62,49 @@ namespace Veterinaria.Logica.Services
             return mascota;
         }
 
-        public void DarDeBaja(int id)
+        public bool DarDeBaja(int id)
         {
-            Mascota mascota = GetById(id);
-            mascota.DarDeBaja();
-            repo.Update(mascota);
-        }
-
-        public void Reactivar(int id)
-        {
-            Mascota mascota = GetById(id);
-
-            if (mascota.Cliente != null && !mascota.Cliente.Activo)
+            Mascota? mascota = repo.GetById(id);
+            if (mascota == null)
             {
-                throw new NegocioException("No se puede reactivar la mascota porque su cliente está dado de baja.");
+                return false;
             }
 
-            mascota.Reactivar();
+            mascota.Activo = false;
             repo.Update(mascota);
+            return true;
         }
 
-        // El cliente y el tipo tienen que existir y estar activos
-        private void ValidarRelaciones(Mascota mascota)
+        public bool Reactivar(int id)
         {
-            Cliente? cliente = clienteRepo.GetById(mascota.IdCliente);
-            if (cliente == null || !cliente.Activo)
+            Mascota? mascota = repo.GetById(id);
+            if (mascota == null)
             {
-                throw new NegocioException("El cliente seleccionado no existe o está dado de baja.");
+                return false;
             }
 
-            TipoMascota? tipo = tipoRepo.GetById(mascota.IdTipoMascota);
-            if (tipo == null || !tipo.Activo)
+            if (mascota.Cliente != null && mascota.Cliente.Activo == false)
             {
-                throw new NegocioException("El tipo de mascota seleccionado no existe o está dado de baja.");
+                throw new NegocioException("No se puede reactivar la mascota porque el cliente esta dado de baja.");
+            }
+
+            mascota.Activo = true;
+            repo.Update(mascota);
+            return true;
+        }
+
+        private void ValidarClienteYTipo(int idCliente, int idTipo)
+        {
+            Cliente? cliente = clienteRepo.GetById(idCliente);
+            if (cliente == null || cliente.Activo == false)
+            {
+                throw new NegocioException("El cliente no existe o esta dado de baja.");
+            }
+
+            TipoMascota? tipo = tipoRepo.GetById(idTipo);
+            if (tipo == null || tipo.Activo == false)
+            {
+                throw new NegocioException("El tipo de mascota no existe o esta dado de baja.");
             }
         }
     }

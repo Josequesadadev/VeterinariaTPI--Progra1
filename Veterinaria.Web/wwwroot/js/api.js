@@ -1,153 +1,89 @@
-// ===== Configuracion y funciones comunes para hablar con la Web API =====
-
 const API_URL = 'http://localhost:5080/api';
 
-// ----- Sesion (el token JWT se guarda en localStorage) -----
-const sesion = {
-    guardar(datos) {
-        localStorage.setItem('token', datos.token);
-        localStorage.setItem('usuario', datos.nombreUsuario);
-        localStorage.setItem('rol', datos.rol);
-        localStorage.setItem('expira', datos.expira);
-    },
-    cerrar() {
-        localStorage.removeItem('token');
-        localStorage.removeItem('usuario');
-        localStorage.removeItem('rol');
-        localStorage.removeItem('expira');
-    },
-    token() {
-        return localStorage.getItem('token');
-    },
-    usuario() {
-        return localStorage.getItem('usuario');
-    },
-    rol() {
-        return localStorage.getItem('rol');
-    },
-    esAdmin() {
-        return localStorage.getItem('rol') === 'Admin';
-    },
-    estaLogueado() {
-        const token = localStorage.getItem('token');
-        const expira = localStorage.getItem('expira');
-        return token !== null && expira !== null && new Date(expira) > new Date();
-    }
-};
-
-// Si no hay sesion valida, vuelve al login
-function requiereLogin() {
-    if (!sesion.estaLogueado()) {
-        sesion.cerrar();
-        window.location.href = 'login.html';
-    }
+// si no hay sesion o el token vencio, vuelve al login
+if (localStorage.getItem('token') == null || new Date(localStorage.getItem('expira')) < new Date()) {
+    localStorage.clear();
+    window.location.href = 'login.html';
 }
 
-// ----- Llamada generica a la API: agrega el token y maneja los errores -----
-async function api(ruta, metodo = 'GET', cuerpo = null) {
+// muestra el usuario logueado en el menu
+document.addEventListener('DOMContentLoaded', () => {
+    const span = document.getElementById('usuario-logueado');
+    if (span) {
+        span.textContent = localStorage.getItem('usuario') + ' (' + localStorage.getItem('rol') + ')';
+    }
+});
+
+function cerrarSesion() {
+    localStorage.clear();
+    window.location.href = 'index.html';
+}
+
+function esAdmin() {
+    return localStorage.getItem('rol') == 'Admin';
+}
+
+// funcion para llamar a la api con el token
+async function llamarApi(ruta, metodo = 'GET', datos = null) {
     const opciones = {
         method: metodo,
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
+        }
     };
-
-    if (sesion.token()) {
-        opciones.headers['Authorization'] = 'Bearer ' + sesion.token();
-    }
-    if (cuerpo !== null) {
-        opciones.body = JSON.stringify(cuerpo);
+    if (datos != null) {
+        opciones.body = JSON.stringify(datos);
     }
 
-    let respuesta;
-    try {
-        respuesta = await fetch(API_URL + ruta, opciones);
-    } catch (error) {
-        throw new Error('No se pudo conectar con la API. Verifique que el proyecto Veterinaria.API esté ejecutándose.');
-    }
+    const respuesta = await fetch(API_URL + ruta, opciones);
 
-    // 401: token vencido o invalido -> al login (salvo en el propio login)
-    if (respuesta.status === 401 && ruta !== '/auth/login') {
-        sesion.cerrar();
-        window.location.href = 'login.html';
-        throw new Error('La sesión expiró.');
+    if (respuesta.status == 401) {
+        cerrarSesion();
+        return;
     }
-    if (respuesta.status === 403) {
-        throw new Error('No tiene permisos para realizar esta acción (solo el administrador).');
+    if (respuesta.status == 403) {
+        throw new Error('No tiene permisos para hacer esto (solo el administrador).');
     }
-    if (respuesta.status === 204) {
+    if (respuesta.status == 204) {
         return null;
     }
 
-    const datos = await respuesta.json().catch(() => null);
-
+    const json = await respuesta.json();
     if (!respuesta.ok) {
-        throw new Error(datos && datos.mensaje ? datos.mensaje : 'Error ' + respuesta.status);
+        throw new Error(json.mensaje);
     }
-    return datos;
+    return json;
 }
 
-// ----- Utilidades -----
-function mostrarAlerta(mensaje, tipo = 'success') {
-    let contenedor = document.getElementById('contenedor-alertas');
-    if (!contenedor) {
-        contenedor = document.createElement('div');
-        contenedor.id = 'contenedor-alertas';
-        document.body.appendChild(contenedor);
+function llenarCombo(select, lista, texto, primeraOpcion) {
+    select.innerHTML = '<option value="">' + primeraOpcion + '</option>';
+    for (const item of lista) {
+        select.innerHTML += '<option value="' + item.id + '">' + texto(item) + '</option>';
     }
-    const alerta = document.createElement('div');
-    alerta.className = `alert alert-${tipo} alert-dismissible fade show shadow-sm`;
-    alerta.innerHTML = `${escaparHtml(mensaje)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
-    contenedor.appendChild(alerta);
-    setTimeout(() => alerta.remove(), 5000);
 }
 
-function escaparHtml(texto) {
-    const div = document.createElement('div');
-    div.textContent = texto ?? '';
-    return div.innerHTML;
-}
-
-function formatearMoneda(valor) {
-    return Number(valor).toLocaleString('es-AR', { style: 'currency', currency: 'ARS' });
+function formatoPrecio(numero) {
+    return '$ ' + numero.toLocaleString('es-AR', { minimumFractionDigits: 2 });
 }
 
 // "2026-11-08T00:00:00" -> "08/11/2026"
-function formatearFecha(fechaIso) {
-    const [anio, mes, dia] = fechaIso.substring(0, 10).split('-');
-    return `${dia}/${mes}/${anio}`;
+function formatoFecha(fecha) {
+    const partes = fecha.substring(0, 10).split('-');
+    return partes[2] + '/' + partes[1] + '/' + partes[0];
 }
 
-// Fecha de hoy en formato yyyy-mm-dd (para los input type="date")
-function hoyIso() {
+// fecha de hoy en formato yyyy-mm-dd
+function fechaHoy() {
     const hoy = new Date();
-    hoy.setMinutes(hoy.getMinutes() - hoy.getTimezoneOffset());
-    return hoy.toISOString().substring(0, 10);
+    const mes = String(hoy.getMonth() + 1).padStart(2, '0');
+    const dia = String(hoy.getDate()).padStart(2, '0');
+    return hoy.getFullYear() + '-' + mes + '-' + dia;
 }
 
-function badgeEstado(activo) {
-    return activo
-        ? '<span class="badge text-bg-success">Activo</span>'
-        : '<span class="badge text-bg-secondary">Inactivo</span>';
-}
-
-// Llena un <select> con una lista de objetos
-function llenarSelect(select, lista, textoOpcion, textoVacio = 'Seleccione...') {
-    select.innerHTML = `<option value="">${textoVacio}</option>`;
-    lista.forEach(item => {
-        const opcion = document.createElement('option');
-        opcion.value = item.id;
-        opcion.textContent = textoOpcion(item);
-        select.appendChild(opcion);
-    });
-}
-
-// Botones de editar / baja / reactivar. La baja y la reactivacion solo las ve el administrador.
-function botonesAcciones(item) {
-    let html = `<button class="btn btn-sm btn-outline-primary me-1" data-accion="editar" data-id="${item.id}" title="Editar"
-                    ${item.activo ? '' : 'disabled'}><i class="bi bi-pencil"></i></button>`;
-    if (sesion.esAdmin()) {
-        html += item.activo
-            ? `<button class="btn btn-sm btn-outline-danger" data-accion="baja" data-id="${item.id}" title="Dar de baja"><i class="bi bi-trash"></i></button>`
-            : `<button class="btn btn-sm btn-outline-success" data-accion="reactivar" data-id="${item.id}" title="Reactivar"><i class="bi bi-arrow-counterclockwise"></i></button>`;
+function estado(activo) {
+    if (activo) {
+        return '<span class="badge bg-success">Activo</span>';
     }
-    return html;
+    return '<span class="badge bg-secondary">Inactivo</span>';
 }

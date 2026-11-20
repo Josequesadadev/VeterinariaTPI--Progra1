@@ -1,7 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using Veterinaria.Logica.Dtos;
 using Veterinaria.Logica.Models;
 using Veterinaria.Logica.Repositories.Interfaces;
-using Veterinaria.Logica.Seguridad;
 using Veterinaria.Logica.Services.Interfaces;
 
 namespace Veterinaria.Logica.Services
@@ -15,38 +16,29 @@ namespace Veterinaria.Logica.Services
             this.repo = repo;
         }
 
-        // Devuelve el usuario si las credenciales son correctas, o null si no
-        public Usuario? ValidarCredenciales(LoginRequestDto dto)
+        // devuelve el usuario si los datos son correctos, si no devuelve null
+        public Usuario? Login(LoginDto dto)
         {
-            if (string.IsNullOrWhiteSpace(dto.NombreUsuario) || string.IsNullOrWhiteSpace(dto.Password))
+            Usuario? usuario = repo.GetByNombreUsuario(dto.NombreUsuario);
+
+            if (usuario == null || usuario.Activo == false)
             {
                 return null;
             }
 
-            Usuario? usuario = repo.GetByNombreUsuario(dto.NombreUsuario.Trim());
-            if (usuario == null || !usuario.Activo)
+            if (usuario.PasswordHash != HashPassword(dto.Password))
             {
                 return null;
             }
 
-            return PasswordHasher.Verificar(dto.Password, usuario.PasswordHash) ? usuario : null;
+            return usuario;
         }
 
-        // Si la tabla Usuarios esta vacia, crea un administrador y un empleado para poder ingresar
-        public void CrearUsuariosIniciales()
+        // la contraseña se guarda como hash SHA256, nunca en texto plano
+        public static string HashPassword(string password)
         {
-            if (repo.HayUsuarios())
-            {
-                return;
-            }
-
-            Usuario admin = new Usuario(0, "admin", "admin@veterinaria.com", Rol.Admin);
-            admin.PasswordHash = PasswordHasher.Hashear("Admin123");
-            repo.Add(admin);
-
-            Usuario empleado = new Usuario(0, "empleado", "empleado@veterinaria.com", Rol.Empleado);
-            empleado.PasswordHash = PasswordHasher.Hashear("Empleado123");
-            repo.Add(empleado);
+            byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+            return Convert.ToHexString(bytes);
         }
     }
 }

@@ -16,7 +16,6 @@ namespace Veterinaria.Logica.Data
         public virtual DbSet<Mascota> Mascotas { get; set; }
         public virtual DbSet<Atencion> Atenciones { get; set; }
 
-        // Mapeo objeto-relacional: une cada clase y propiedad con su tabla y columna
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             modelBuilder.Entity<Usuario>(entity =>
@@ -42,14 +41,13 @@ namespace Veterinaria.Logica.Data
                 entity.Property(e => e.Apellido).HasColumnName("apellido").HasMaxLength(50).IsUnicode(false).IsRequired();
                 entity.Property(e => e.Telefono).HasColumnName("telefono").HasMaxLength(20).IsUnicode(false);
                 entity.Property(e => e.Activo).HasColumnName("activo");
-                // El enum Sexo se guarda como un caracter: M, F o X
+                // en la base el sexo se guarda como M, F o X
                 entity.Property(e => e.Sexo)
                     .HasColumnName("sexo")
                     .HasColumnType("char(1)")
                     .HasConversion(
                         v => v == Sexo.Masculino ? "M" : v == Sexo.Femenino ? "F" : "X",
                         v => v == "M" ? Sexo.Masculino : v == "F" ? Sexo.Femenino : Sexo.Otro);
-                entity.Ignore(e => e.NombreCompleto);
             });
 
             modelBuilder.Entity<TipoMascota>(entity =>

@@ -6,49 +6,71 @@ using Veterinaria.Logica.Repositories.Interfaces;
 
 namespace Veterinaria.Logica.Repositories
 {
-    public class AtencionRepository : Repository<Atencion>, IAtencionRepository
+    public class AtencionRepository : IAtencionRepository
     {
-        public AtencionRepository(VeterinariaDbContext db) : base(db) { }
+        private readonly VeterinariaDbContext db;
 
-        protected override IQueryable<Atencion> Query()
+        public AtencionRepository(VeterinariaDbContext db)
         {
-            return db.Atenciones
+            this.db = db;
+        }
+
+        public List<Atencion> GetAll(FiltroAtencionDto filtro)
+        {
+            IQueryable<Atencion> consulta = db.Atenciones
                 .Include(a => a.TipoAtencion)
                 .Include(a => a.Mascota).ThenInclude(m => m!.Cliente)
                 .Include(a => a.Mascota).ThenInclude(m => m!.TipoMascota);
-        }
 
-        public override List<Atencion> GetAll(bool incluirInactivos)
-        {
-            return GetByFiltro(new AtencionFiltroDto { IncluirInactivas = incluirInactivos });
-        }
-
-        public List<Atencion> GetByFiltro(AtencionFiltroDto filtro)
-        {
-            IQueryable<Atencion> consulta = Query().Where(a => filtro.IncluirInactivas || a.Activo);
-
-            if (filtro.IdCliente.HasValue)
+            if (!filtro.IncluirInactivas)
             {
-                consulta = consulta.Where(a => a.Mascota!.IdCliente == filtro.IdCliente.Value);
+                consulta = consulta.Where(a => a.Activo == true);
             }
-            if (filtro.IdMascota.HasValue)
+            if (filtro.IdCliente != null)
             {
-                consulta = consulta.Where(a => a.IdMascota == filtro.IdMascota.Value);
+                consulta = consulta.Where(a => a.Mascota!.IdCliente == filtro.IdCliente);
             }
-            if (filtro.IdTipoAtencion.HasValue)
+            if (filtro.IdMascota != null)
             {
-                consulta = consulta.Where(a => a.IdTipoAtencion == filtro.IdTipoAtencion.Value);
+                consulta = consulta.Where(a => a.IdMascota == filtro.IdMascota);
+            }
+            if (filtro.IdTipoAtencion != null)
+            {
+                consulta = consulta.Where(a => a.IdTipoAtencion == filtro.IdTipoAtencion);
             }
             consulta = FiltrarFechas(consulta, filtro.Desde, filtro.Hasta);
 
             return consulta.OrderByDescending(a => a.Fecha).ThenByDescending(a => a.Id).ToList();
         }
 
-        // ===== Consultas para los dashboards (solo atenciones activas) =====
+        public Atencion? GetById(int id)
+        {
+            return db.Atenciones
+                .Include(a => a.TipoAtencion)
+                .Include(a => a.Mascota).ThenInclude(m => m!.Cliente)
+                .Include(a => a.Mascota).ThenInclude(m => m!.TipoMascota)
+                .FirstOrDefault(a => a.Id == id);
+        }
+
+        public void Add(Atencion atencion)
+        {
+            db.Atenciones.Add(atencion);
+            db.SaveChanges();
+        }
+
+        public void Update(Atencion atencion)
+        {
+            db.Entry(atencion).State = EntityState.Modified;
+            db.SaveChanges();
+        }
+
+        // ===== DASHBOARDS (solo atenciones activas) =====
 
         public List<FacturacionMensualDto> GetFacturacionMensual(DateTime desde, DateTime hasta)
         {
-            return FiltrarFechas(db.Atenciones.Where(a => a.Activo), desde, hasta)
+            IQueryable<Atencion> consulta = FiltrarFechas(db.Atenciones.Where(a => a.Activo == true), desde, hasta);
+
+            return consulta
                 .GroupBy(a => new { a.Fecha.Year, a.Fecha.Month })
                 .Select(g => new FacturacionMensualDto
                 {
@@ -62,7 +84,9 @@ namespace Veterinaria.Logica.Repositories
 
         public List<AtencionesPorTipoDto> GetCantidadPorTipo(DateTime? desde, DateTime? hasta)
         {
-            return FiltrarFechas(db.Atenciones.Where(a => a.Activo), desde, hasta)
+            IQueryable<Atencion> consulta = FiltrarFechas(db.Atenciones.Where(a => a.Activo == true), desde, hasta);
+
+            return consulta
                 .GroupBy(a => a.TipoAtencion!.Nombre)
                 .Select(g => new AtencionesPorTipoDto
                 {
@@ -74,17 +98,13 @@ namespace Veterinaria.Logica.Repositories
                 .ToList();
         }
 
-        // Une Atenciones -> Mascotas -> Clientes, agrupa por cliente y ordena
-        public List<TopClienteDto> GetTopClientes(DateTime? desde, DateTime? hasta, int cantidad)
+        public List<TopClienteDto> GetTopClientes(DateTime? desde, DateTime? hasta)
         {
-            return FiltrarFechas(db.Atenciones.Where(a => a.Activo), desde, hasta)
-                .GroupBy(a => new
-                {
-                    a.Mascota!.Cliente!.Id,
-                    a.Mascota.Cliente.Codigo,
-                    a.Mascota.Cliente.Apellido,
-                    a.Mascota.Cliente.Nombre
-                })
+            IQueryable<Atencion> consulta = FiltrarFechas(db.Atenciones.Where(a => a.Activo == true), desde, hasta);
+
+            // atenciones -> mascotas -> clientes, agrupado por cliente
+            return consulta
+                .GroupBy(a => new { a.Mascota!.Cliente!.Id, a.Mascota.Cliente.Codigo, a.Mascota.Cliente.Apellido, a.Mascota.Cliente.Nombre })
                 .Select(g => new TopClienteDto
                 {
                     IdCliente = g.Key.Id,
@@ -95,20 +115,20 @@ namespace Veterinaria.Logica.Repositories
                 })
                 .OrderByDescending(x => x.Cantidad)
                 .ThenByDescending(x => x.Importe)
-                .Take(cantidad)
+                .Take(5)
                 .ToList();
         }
 
-        // "hasta" es inclusive: se compara contra el dia siguiente a las 00:00
-        private static IQueryable<Atencion> FiltrarFechas(IQueryable<Atencion> consulta, DateTime? desde, DateTime? hasta)
+        private IQueryable<Atencion> FiltrarFechas(IQueryable<Atencion> consulta, DateTime? desde, DateTime? hasta)
         {
-            if (desde.HasValue)
+            if (desde != null)
             {
                 DateTime d = desde.Value.Date;
                 consulta = consulta.Where(a => a.Fecha >= d);
             }
-            if (hasta.HasValue)
+            if (hasta != null)
             {
+                // se suma un dia para que incluya todo el dia "hasta"
                 DateTime h = hasta.Value.Date.AddDays(1);
                 consulta = consulta.Where(a => a.Fecha < h);
             }

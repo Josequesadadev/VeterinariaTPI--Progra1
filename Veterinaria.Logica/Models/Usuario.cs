@@ -14,7 +14,9 @@ namespace Veterinaria.Logica.Models
         public Rol Rol { get; set; } = Rol.Empleado;
         public DateTime FechaAlta { get; set; } = DateTime.Now;
 
-        public Usuario() { }
+        public Usuario()
+        {
+        }
 
         public Usuario(int id, string nombreUsuario, string email, Rol rol)
         {
@@ -35,15 +37,15 @@ namespace Veterinaria.Logica.Models
             {
                 throw new NegocioException("El nombre de usuario es obligatorio.");
             }
-            if (string.IsNullOrWhiteSpace(Email) || !Email.Contains('@'))
+            if (!Email.Contains('@'))
             {
-                throw new NegocioException("El email no es válido.");
+                throw new NegocioException("El email no es valido.");
             }
         }
 
         public override string ToString()
         {
-            return $"{NombreUsuario} ({Rol})";
+            return NombreUsuario + " (" + Rol + ")";
         }
     }
 }

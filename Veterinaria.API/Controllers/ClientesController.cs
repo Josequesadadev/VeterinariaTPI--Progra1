@@ -1,14 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Veterinaria.Logica.Dtos;
+using Veterinaria.Logica.Exceptions;
 using Veterinaria.Logica.Models;
 using Veterinaria.Logica.Services.Interfaces;
 
 namespace Veterinaria.API.Controllers
 {
     [Authorize]
+    [ApiController]
     [Route("api/clientes")]
-    public class ClientesController : BaseApiController
+    public class ClientesController : ControllerBase
     {
         private readonly IClienteService service;
         private readonly IMascotaService mascotaService;
@@ -22,63 +24,140 @@ namespace Veterinaria.API.Controllers
         [HttpGet]
         public IActionResult GetAll([FromQuery] string? texto, [FromQuery] bool incluirInactivos = false)
         {
-            return Ejecutar(() => Ok(service.GetAll(texto, incluirInactivos)));
+            try
+            {
+                return Ok(service.GetAll(texto, incluirInactivos));
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
 
-        [HttpGet("{id}")]
+        [HttpGet]
+        [Route("{id}")]
         public IActionResult GetById([FromRoute] int id)
         {
-            return Ejecutar(() => Ok(service.GetById(id)));
+            try
+            {
+                Cliente? cliente = service.GetById(id);
+                if (cliente == null)
+                {
+                    return NotFound(new { mensaje = "No existe el cliente." });
+                }
+                return Ok(cliente);
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
 
-        // Mascotas activas de un cliente: lo usa el formulario de atenciones (seleccion dependiente)
-        [HttpGet("{id}/mascotas")]
+        // mascotas activas del cliente (para el combo de atenciones)
+        [HttpGet]
+        [Route("{id}/mascotas")]
         public IActionResult GetMascotas([FromRoute] int id)
         {
-            return Ejecutar(() =>
+            try
             {
-                service.GetById(id);
+                if (service.GetById(id) == null)
+                {
+                    return NotFound(new { mensaje = "No existe el cliente." });
+                }
                 return Ok(mascotaService.GetAll(id, null, null, false));
-            });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
 
         [HttpPost]
         public IActionResult Create([FromBody] ClienteDto dto)
         {
-            return Ejecutar(() =>
+            try
             {
                 Cliente nuevo = service.Crear(dto);
-                return CreatedAtAction(nameof(GetById), new { id = nuevo.Id }, nuevo);
-            });
+                return Created("api/clientes/" + nuevo.Id, nuevo);
+            }
+            catch (NegocioException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
 
-        [HttpPut("{id}")]
+        [HttpPut]
+        [Route("{id}")]
         public IActionResult Update([FromRoute] int id, [FromBody] ClienteDto dto)
         {
-            return Ejecutar(() => Ok(service.Modificar(id, dto)));
+            try
+            {
+                Cliente? cliente = service.Modificar(id, dto);
+                if (cliente == null)
+                {
+                    return NotFound(new { mensaje = "No existe el cliente." });
+                }
+                return Ok(cliente);
+            }
+            catch (NegocioException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
 
-        // Baja logica: solo el administrador
+        // baja logica, solo el administrador
         [Authorize(Roles = "Admin")]
-        [HttpDelete("{id}")]
+        [HttpDelete]
+        [Route("{id}")]
         public IActionResult Delete([FromRoute] int id)
         {
-            return Ejecutar(() =>
+            try
             {
-                service.DarDeBaja(id);
+                if (!service.DarDeBaja(id))
+                {
+                    return NotFound(new { mensaje = "No existe el cliente." });
+                }
                 return NoContent();
-            });
+            }
+            catch (NegocioException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPatch("{id}/reactivar")]
+        [HttpPatch]
+        [Route("{id}/reactivar")]
         public IActionResult Reactivar([FromRoute] int id)
         {
-            return Ejecutar(() =>
+            try
             {
-                service.Reactivar(id);
+                if (!service.Reactivar(id))
+                {
+                    return NotFound(new { mensaje = "No existe el cliente." });
+                }
                 return NoContent();
-            });
+            }
+            catch (NegocioException ex)
+            {
+                return BadRequest(new { mensaje = ex.Message });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
     }
 }

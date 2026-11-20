@@ -5,41 +5,54 @@ using Veterinaria.Logica.Repositories.Interfaces;
 
 namespace Veterinaria.Logica.Repositories
 {
-    public class MascotaRepository : Repository<Mascota>, IMascotaRepository
+    public class MascotaRepository : IMascotaRepository
     {
-        public MascotaRepository(VeterinariaDbContext db) : base(db) { }
+        private readonly VeterinariaDbContext db;
 
-        // Siempre traemos el cliente y el tipo junto con la mascota
-        protected override IQueryable<Mascota> Query()
+        public MascotaRepository(VeterinariaDbContext db)
         {
-            return db.Mascotas
-                .Include(m => m.Cliente)
-                .Include(m => m.TipoMascota);
+            this.db = db;
         }
 
-        public override List<Mascota> GetAll(bool incluirInactivos)
+        public List<Mascota> GetAll(int? idCliente, int? idTipoMascota, string? nombre, bool incluirInactivos)
         {
-            return GetByFiltro(null, null, null, incluirInactivos);
-        }
+            IQueryable<Mascota> consulta = db.Mascotas.Include(m => m.Cliente).Include(m => m.TipoMascota);
 
-        public List<Mascota> GetByFiltro(int? idCliente, int? idTipoMascota, string? nombre, bool incluirInactivos)
-        {
-            IQueryable<Mascota> consulta = Query().Where(m => incluirInactivos || m.Activo);
-
-            if (idCliente.HasValue)
+            if (!incluirInactivos)
             {
-                consulta = consulta.Where(m => m.IdCliente == idCliente.Value);
+                consulta = consulta.Where(m => m.Activo == true);
             }
-            if (idTipoMascota.HasValue)
+            if (idCliente != null)
             {
-                consulta = consulta.Where(m => m.IdTipoMascota == idTipoMascota.Value);
+                consulta = consulta.Where(m => m.IdCliente == idCliente);
             }
-            if (!string.IsNullOrWhiteSpace(nombre))
+            if (idTipoMascota != null)
             {
-                consulta = consulta.Where(m => EF.Functions.Collate(m.Nombre, "Modern_Spanish_CI_AI").Contains(nombre));
+                consulta = consulta.Where(m => m.IdTipoMascota == idTipoMascota);
+            }
+            if (!string.IsNullOrEmpty(nombre))
+            {
+                consulta = consulta.Where(m => m.Nombre.Contains(nombre));
             }
 
             return consulta.OrderBy(m => m.Nombre).ToList();
+        }
+
+        public Mascota? GetById(int id)
+        {
+            return db.Mascotas.Include(m => m.Cliente).Include(m => m.TipoMascota).FirstOrDefault(m => m.Id == id);
+        }
+
+        public void Add(Mascota mascota)
+        {
+            db.Mascotas.Add(mascota);
+            db.SaveChanges();
+        }
+
+        public void Update(Mascota mascota)
+        {
+            db.Entry(mascota).State = EntityState.Modified;
+            db.SaveChanges();
         }
     }
 }

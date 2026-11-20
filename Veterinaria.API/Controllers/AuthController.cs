@@ -6,31 +6,38 @@ using Veterinaria.Logica.Services.Interfaces;
 
 namespace Veterinaria.API.Controllers
 {
+    [ApiController]
     [Route("api/auth")]
-    public class AuthController : BaseApiController
+    public class AuthController : ControllerBase
     {
-        private readonly IAuthService authService;
+        private readonly IAuthService service;
         private readonly TokenService tokenService;
 
-        public AuthController(IAuthService authService, TokenService tokenService)
+        public AuthController(IAuthService service, TokenService tokenService)
         {
-            this.authService = authService;
+            this.service = service;
             this.tokenService = tokenService;
         }
 
-        // POST api/auth/login  -> si las credenciales son correctas devuelve el token JWT
-        [HttpPost("login")]
-        public IActionResult Login([FromBody] LoginRequestDto dto)
+        [HttpPost]
+        [Route("login")]
+        public IActionResult Login([FromBody] LoginDto dto)
         {
-            return Ejecutar(() =>
+            try
             {
-                Usuario? usuario = authService.ValidarCredenciales(dto);
+                Usuario? usuario = service.Login(dto);
+
                 if (usuario == null)
                 {
                     return Unauthorized(new { mensaje = "Usuario o contraseña incorrectos." });
                 }
+
                 return Ok(tokenService.GenerarToken(usuario));
-            });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new { mensaje = "Error en el servidor." });
+            }
         }
     }
 }

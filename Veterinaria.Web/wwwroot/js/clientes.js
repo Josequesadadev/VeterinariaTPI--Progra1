@@ -1,116 +1,124 @@
-const tabla = document.getElementById('tabla');
-const formFiltros = document.getElementById('form-filtros');
-const formCliente = document.getElementById('form-cliente');
-const modal = new bootstrap.Modal(document.getElementById('modal'));
-const letraSexo = { Masculino: 'M', Femenino: 'F', Otro: 'X' };
-
 let clientes = [];
 let idEditando = null;
+const modal = new bootstrap.Modal(document.getElementById('modal'));
 
 async function cargarClientes() {
-    const texto = document.getElementById('filtro-texto').value.trim();
+    const texto = document.getElementById('filtro-texto').value;
     const inactivos = document.getElementById('filtro-inactivos').checked;
+
     try {
-        clientes = await api(`/clientes?texto=${encodeURIComponent(texto)}&incluirInactivos=${inactivos}`);
-        mostrarTabla();
+        clientes = await llamarApi('/clientes?texto=' + texto + '&incluirInactivos=' + inactivos);
+        mostrarClientes();
     } catch (error) {
-        mostrarAlerta(error.message, 'danger');
+        alert(error.message);
     }
 }
 
-function mostrarTabla() {
-    if (clientes.length === 0) {
-        tabla.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No hay clientes para mostrar.</td></tr>';
+function mostrarClientes() {
+    const tabla = document.getElementById('tabla');
+    tabla.innerHTML = '';
+
+    if (clientes.length == 0) {
+        tabla.innerHTML = '<tr><td colspan="6" class="text-center">No hay clientes</td></tr>';
         return;
     }
-    tabla.innerHTML = clientes.map(c => `
-        <tr class="${c.activo ? '' : 'fila-inactiva'}">
-            <td>${escaparHtml(c.codigo)}</td>
-            <td>${escaparHtml(c.apellido)}, ${escaparHtml(c.nombre)}</td>
-            <td>${escaparHtml(c.sexo)}</td>
-            <td>${escaparHtml(c.telefono ?? '-')}</td>
-            <td>${badgeEstado(c.activo)}</td>
-            <td class="text-end acciones">${botonesAcciones(c)}</td>
-        </tr>`).join('');
+
+    for (const c of clientes) {
+        let botones = '';
+        if (c.activo) {
+            botones += '<button class="btn btn-warning btn-sm" onclick="editarCliente(' + c.id + ')">Editar</button> ';
+        }
+        if (esAdmin() && c.activo) {
+            botones += '<button class="btn btn-danger btn-sm" onclick="bajaCliente(' + c.id + ')">Baja</button>';
+        }
+        if (esAdmin() && !c.activo) {
+            botones += '<button class="btn btn-info btn-sm" onclick="reactivarCliente(' + c.id + ')">Reactivar</button>';
+        }
+
+        tabla.innerHTML += '<tr>' +
+            '<td>' + c.codigo + '</td>' +
+            '<td>' + c.apellido + ', ' + c.nombre + '</td>' +
+            '<td>' + c.sexo + '</td>' +
+            '<td>' + (c.telefono ?? '') + '</td>' +
+            '<td>' + estado(c.activo) + '</td>' +
+            '<td>' + botones + '</td>' +
+            '</tr>';
+    }
 }
 
-function abrirModal(cliente = null) {
-    formCliente.reset();
-    formCliente.classList.remove('was-validated');
-    idEditando = cliente ? cliente.id : null;
-    document.getElementById('modal-titulo').textContent = cliente ? 'Editar cliente' : 'Nuevo cliente';
-
-    if (cliente) {
-        document.getElementById('codigo').value = cliente.codigo;
-        document.getElementById('nombre').value = cliente.nombre;
-        document.getElementById('apellido').value = cliente.apellido;
-        document.getElementById('sexo').value = letraSexo[cliente.sexo];
-        document.getElementById('telefono').value = cliente.telefono ?? '';
-    }
+function nuevoCliente() {
+    idEditando = null;
+    document.getElementById('modal-titulo').textContent = 'Nuevo cliente';
+    document.getElementById('codigo').value = '';
+    document.getElementById('nombre').value = '';
+    document.getElementById('apellido').value = '';
+    document.getElementById('sexo').value = '';
+    document.getElementById('telefono').value = '';
     modal.show();
 }
 
-formCliente.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!formCliente.checkValidity()) {
-        formCliente.classList.add('was-validated');
+function editarCliente(id) {
+    const c = clientes.find(x => x.id == id);
+    idEditando = id;
+    document.getElementById('modal-titulo').textContent = 'Editar cliente';
+    document.getElementById('codigo').value = c.codigo;
+    document.getElementById('nombre').value = c.nombre;
+    document.getElementById('apellido').value = c.apellido;
+    document.getElementById('telefono').value = c.telefono ?? '';
+
+    if (c.sexo == 'Masculino') document.getElementById('sexo').value = 'M';
+    if (c.sexo == 'Femenino') document.getElementById('sexo').value = 'F';
+    if (c.sexo == 'Otro') document.getElementById('sexo').value = 'X';
+
+    modal.show();
+}
+
+async function guardarCliente() {
+    const cliente = {
+        codigo: document.getElementById('codigo').value,
+        nombre: document.getElementById('nombre').value,
+        apellido: document.getElementById('apellido').value,
+        sexo: document.getElementById('sexo').value,
+        telefono: document.getElementById('telefono').value
+    };
+
+    if (cliente.codigo == '' || cliente.nombre == '' || cliente.apellido == '' || cliente.sexo == '') {
+        alert('Complete código, nombre, apellido y sexo.');
         return;
     }
 
-    const dto = {
-        codigo: document.getElementById('codigo').value.trim(),
-        nombre: document.getElementById('nombre').value.trim(),
-        apellido: document.getElementById('apellido').value.trim(),
-        sexo: document.getElementById('sexo').value,
-        telefono: document.getElementById('telefono').value.trim() || null
-    };
-
     try {
-        if (idEditando) {
-            await api(`/clientes/${idEditando}`, 'PUT', dto);
-            mostrarAlerta('Cliente modificado correctamente.');
+        if (idEditando == null) {
+            await llamarApi('/clientes', 'POST', cliente);
         } else {
-            await api('/clientes', 'POST', dto);
-            mostrarAlerta('Cliente creado correctamente.');
+            await llamarApi('/clientes/' + idEditando, 'PUT', cliente);
         }
         modal.hide();
         cargarClientes();
     } catch (error) {
-        mostrarAlerta(error.message, 'danger');
+        alert(error.message);
     }
-});
+}
 
-// Un solo listener para todos los botones de la tabla
-tabla.addEventListener('click', async (e) => {
-    const boton = e.target.closest('button[data-accion]');
-    if (!boton) return;
-
-    const id = Number(boton.dataset.id);
-    const cliente = clientes.find(c => c.id === id);
-
+async function bajaCliente(id) {
+    if (!confirm('¿Seguro que quiere dar de baja el cliente?')) {
+        return;
+    }
     try {
-        if (boton.dataset.accion === 'editar') {
-            abrirModal(cliente);
-        } else if (boton.dataset.accion === 'baja') {
-            if (!confirm(`¿Dar de baja al cliente ${cliente.apellido}, ${cliente.nombre}?`)) return;
-            await api(`/clientes/${id}`, 'DELETE');
-            mostrarAlerta('Cliente dado de baja.');
-            cargarClientes();
-        } else if (boton.dataset.accion === 'reactivar') {
-            await api(`/clientes/${id}/reactivar`, 'PATCH');
-            mostrarAlerta('Cliente reactivado.');
-            cargarClientes();
-        }
+        await llamarApi('/clientes/' + id, 'DELETE');
+        cargarClientes();
     } catch (error) {
-        mostrarAlerta(error.message, 'danger');
+        alert(error.message);
     }
-});
+}
 
-formFiltros.addEventListener('submit', (e) => {
-    e.preventDefault();
-    cargarClientes();
-});
-document.getElementById('filtro-inactivos').addEventListener('change', cargarClientes);
-document.getElementById('btn-nuevo').addEventListener('click', () => abrirModal());
+async function reactivarCliente(id) {
+    try {
+        await llamarApi('/clientes/' + id + '/reactivar', 'PATCH');
+        cargarClientes();
+    } catch (error) {
+        alert(error.message);
+    }
+}
 
 cargarClientes();

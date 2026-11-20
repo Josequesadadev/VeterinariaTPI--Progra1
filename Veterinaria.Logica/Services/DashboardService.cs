@@ -1,4 +1,3 @@
-using System.Globalization;
 using Veterinaria.Logica.Dtos;
 using Veterinaria.Logica.Exceptions;
 using Veterinaria.Logica.Repositories.Interfaces;
@@ -8,73 +7,65 @@ namespace Veterinaria.Logica.Services
 {
     public class DashboardService : IDashboardService
     {
-        private const int CantidadTopClientes = 5;
         private readonly IAtencionRepository repo;
+        private readonly string[] meses = { "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic" };
 
         public DashboardService(IAtencionRepository repo)
         {
             this.repo = repo;
         }
 
-        // Sin año: los ultimos 12 meses (incluyendo el actual). Con año: de enero a diciembre de ese año.
+        // si no viene el año muestra los ultimos 12 meses, si viene muestra de enero a diciembre
         public List<FacturacionMensualDto> GetFacturacionMensual(int? anio)
         {
             DateTime desde;
-            if (anio.HasValue)
+            if (anio != null)
             {
-                if (anio < 2000 || anio > DateTime.Today.Year)
-                {
-                    throw new NegocioException("El año indicado no es válido.");
-                }
                 desde = new DateTime(anio.Value, 1, 1);
             }
             else
             {
-                DateTime primeroDelMes = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
-                desde = primeroDelMes.AddMonths(-11);
+                desde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(-11);
             }
             DateTime hasta = desde.AddMonths(12).AddDays(-1);
 
             List<FacturacionMensualDto> datos = repo.GetFacturacionMensual(desde, hasta);
 
-            // Completamos los meses sin atenciones con 0 para que el grafico muestre los 12
-            CultureInfo cultura = new CultureInfo("es-AR");
+            // armo los 12 meses, los que no tienen atenciones quedan en 0
             List<FacturacionMensualDto> resultado = new List<FacturacionMensualDto>();
             for (int i = 0; i < 12; i++)
             {
-                DateTime mes = desde.AddMonths(i);
-                FacturacionMensualDto? encontrado = datos.FirstOrDefault(d => d.Anio == mes.Year && d.Mes == mes.Month);
-                string nombreMes = cultura.TextInfo.ToTitleCase(mes.ToString("MMMM", cultura)).Substring(0, 3);
+                DateTime fecha = desde.AddMonths(i);
+                FacturacionMensualDto? mes = datos.FirstOrDefault(d => d.Anio == fecha.Year && d.Mes == fecha.Month);
 
-                resultado.Add(new FacturacionMensualDto
-                {
-                    Anio = mes.Year,
-                    Mes = mes.Month,
-                    Etiqueta = $"{nombreMes} {mes:yy}",
-                    Cantidad = encontrado?.Cantidad ?? 0,
-                    Total = encontrado?.Total ?? 0
-                });
+                FacturacionMensualDto item = new FacturacionMensualDto();
+                item.Anio = fecha.Year;
+                item.Mes = fecha.Month;
+                item.Etiqueta = meses[fecha.Month - 1] + " " + fecha.ToString("yy");
+                item.Cantidad = mes != null ? mes.Cantidad : 0;
+                item.Total = mes != null ? mes.Total : 0;
+                resultado.Add(item);
             }
             return resultado;
         }
 
         public List<AtencionesPorTipoDto> GetCantidadPorTipo(DateTime? desde, DateTime? hasta)
         {
-            ValidarRango(desde, hasta);
+            ValidarFechas(desde, hasta);
             return repo.GetCantidadPorTipo(desde, hasta);
         }
 
         public List<TopClienteDto> GetTopClientes(DateTime? desde, DateTime? hasta)
         {
-            ValidarRango(desde, hasta);
-            return repo.GetTopClientes(desde, hasta, CantidadTopClientes);
+            ValidarFechas(desde, hasta);
+            return repo.GetTopClientes(desde, hasta);
         }
 
-        private static void ValidarRango(DateTime? desde, DateTime? hasta)
+        private void ValidarFechas(DateTime? desde, DateTime? hasta)
         {
-            if (desde.HasValue && hasta.HasValue && desde > hasta)
+            if (desde != null && hasta != null && desde > hasta)
             {
-                throw new NegocioException("La fecha 'desde' no puede ser mayor que la fecha 'hasta'.");
+                throw new NegocioException("La fecha desde no puede ser mayor a la fecha hasta.");
             }
         }
     }

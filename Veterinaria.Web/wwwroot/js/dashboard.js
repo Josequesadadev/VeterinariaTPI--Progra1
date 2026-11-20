@@ -1,143 +1,117 @@
-// Dashboards de la pagina principal (usa Chart.js para los graficos)
-const colores = ['#0f766e', '#f59e0b', '#3b82f6', '#ef4444', '#8b5cf6', '#14b8a6'];
 let graficoFacturacion = null;
 let graficoTipos = null;
 
-// ----- 1. Facturacion mensual -----
-function armarFiltroAnio() {
-    const select = document.getElementById('filtro-anio');
+// combo de años: ultimos 12 meses o un año puntual
+function cargarAnios() {
+    const combo = document.getElementById('filtro-anio');
     const anioActual = new Date().getFullYear();
-    select.innerHTML = '<option value="">Últimos 12 meses</option>';
+    combo.innerHTML = '<option value="">Últimos 12 meses</option>';
     for (let anio = anioActual; anio >= anioActual - 3; anio--) {
-        select.innerHTML += `<option value="${anio}">Año ${anio}</option>`;
+        combo.innerHTML += '<option value="' + anio + '">' + anio + '</option>';
     }
-    select.addEventListener('change', cargarFacturacion);
 }
 
+// 1) facturacion mensual
 async function cargarFacturacion() {
     const anio = document.getElementById('filtro-anio').value;
-    try {
-        const datos = await api('/dashboard/facturacion-mensual' + (anio ? `?anio=${anio}` : ''));
-        const total = datos.reduce((suma, d) => suma + d.total, 0);
-        document.getElementById('total-facturacion').textContent = formatearMoneda(total);
+    let url = '/dashboard/facturacion-mensual';
+    if (anio != '') url += '?anio=' + anio;
 
-        if (graficoFacturacion) graficoFacturacion.destroy();
+    try {
+        const datos = await llamarApi(url);
+
+        let total = 0;
+        for (const d of datos) {
+            total += d.total;
+        }
+        document.getElementById('total-facturacion').textContent = formatoPrecio(total);
+
+        if (graficoFacturacion != null) {
+            graficoFacturacion.destroy();
+        }
         graficoFacturacion = new Chart(document.getElementById('grafico-facturacion'), {
             type: 'bar',
             data: {
                 labels: datos.map(d => d.etiqueta),
                 datasets: [{
-                    label: 'Facturación',
+                    label: 'Facturación ($)',
                     data: datos.map(d => d.total),
-                    backgroundColor: colores[0],
-                    borderRadius: 4
+                    backgroundColor: '#0d6efd'
                 }]
             },
-            options: {
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: ctx => `${formatearMoneda(ctx.raw)} (${datos[ctx.dataIndex].cantidad} atenciones)`
-                        }
-                    }
-                },
-                scales: {
-                    y: { beginAtZero: true, ticks: { callback: v => '$' + v.toLocaleString('es-AR') } }
-                }
-            }
+            options: { maintainAspectRatio: false }
         });
     } catch (error) {
-        mostrarAlerta(error.message, 'danger');
+        alert(error.message);
     }
 }
 
-// ----- 2. Cantidad e importe por tipo de atencion -----
+// 2) cantidad e importe por tipo de atencion
 async function cargarPorTipo() {
-    const params = parametrosRango('tipo-desde', 'tipo-hasta');
-    try {
-        const datos = await api('/dashboard/por-tipo' + params);
-        const tbody = document.getElementById('tabla-tipos');
+    const url = '/dashboard/por-tipo' + armarFiltroFechas('tipo-desde', 'tipo-hasta');
 
-        if (datos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Sin atenciones en el período.</td></tr>';
-        } else {
-            const totalCantidad = datos.reduce((s, d) => s + d.cantidad, 0);
-            const totalImporte = datos.reduce((s, d) => s + d.importe, 0);
-            tbody.innerHTML = datos.map((d, i) => `
-                <tr>
-                    <td><i class="bi bi-circle-fill" style="color:${colores[i % colores.length]}"></i> ${escaparHtml(d.tipo)}</td>
-                    <td class="text-end">${d.cantidad}</td>
-                    <td class="text-end">${formatearMoneda(d.importe)}</td>
-                </tr>`).join('') + `
-                <tr class="fw-bold">
-                    <td>Total</td>
-                    <td class="text-end">${totalCantidad}</td>
-                    <td class="text-end">${formatearMoneda(totalImporte)}</td>
-                </tr>`;
+    try {
+        const datos = await llamarApi(url);
+
+        const tabla = document.getElementById('tabla-tipos');
+        tabla.innerHTML = '';
+        for (const d of datos) {
+            tabla.innerHTML += '<tr><td>' + d.tipo + '</td><td>' + d.cantidad + '</td><td>' + formatoPrecio(d.importe) + '</td></tr>';
+        }
+        if (datos.length == 0) {
+            tabla.innerHTML = '<tr><td colspan="3">No hay datos</td></tr>';
         }
 
-        if (graficoTipos) graficoTipos.destroy();
+        if (graficoTipos != null) {
+            graficoTipos.destroy();
+        }
         graficoTipos = new Chart(document.getElementById('grafico-tipos'), {
             type: 'pie',
             data: {
                 labels: datos.map(d => d.tipo),
-                datasets: [{ data: datos.map(d => d.cantidad), backgroundColor: colores }]
+                datasets: [{ data: datos.map(d => d.cantidad) }]
             },
-            options: {
-                maintainAspectRatio: false,
-                plugins: { legend: { position: 'right' } }
-            }
+            options: { maintainAspectRatio: false }
         });
     } catch (error) {
-        mostrarAlerta(error.message, 'danger');
+        alert(error.message);
     }
 }
 
-// ----- 3. Top 5 de clientes -----
+// 3) top 5 de clientes
 async function cargarTopClientes() {
-    const params = parametrosRango('top-desde', 'top-hasta');
-    try {
-        const datos = await api('/dashboard/top-clientes' + params);
-        const tbody = document.getElementById('tabla-top');
+    const url = '/dashboard/top-clientes' + armarFiltroFechas('top-desde', 'top-hasta');
 
-        if (datos.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Sin atenciones en el período.</td></tr>';
-            return;
+    try {
+        const datos = await llamarApi(url);
+
+        const tabla = document.getElementById('tabla-top');
+        tabla.innerHTML = '';
+        let posicion = 1;
+        for (const d of datos) {
+            tabla.innerHTML += '<tr><td>' + posicion + '</td><td>' + d.cliente + '</td><td>' + d.cantidad + '</td><td>' + formatoPrecio(d.importe) + '</td></tr>';
+            posicion++;
         }
-        tbody.innerHTML = datos.map((d, i) => `
-            <tr>
-                <td><span class="ranking">${i + 1}</span></td>
-                <td>${escaparHtml(d.cliente)}<br><small class="text-muted">${escaparHtml(d.codigo)}</small></td>
-                <td class="text-end">${d.cantidad}</td>
-                <td class="text-end">${formatearMoneda(d.importe)}</td>
-            </tr>`).join('');
+        if (datos.length == 0) {
+            tabla.innerHTML = '<tr><td colspan="4">No hay datos</td></tr>';
+        }
     } catch (error) {
-        mostrarAlerta(error.message, 'danger');
+        alert(error.message);
     }
 }
 
-function parametrosRango(idDesde, idHasta) {
-    const params = new URLSearchParams();
+function armarFiltroFechas(idDesde, idHasta) {
     const desde = document.getElementById(idDesde).value;
     const hasta = document.getElementById(idHasta).value;
-    if (desde) params.append('desde', desde);
-    if (hasta) params.append('hasta', hasta);
-    const texto = params.toString();
-    return texto ? '?' + texto : '';
+    let filtro = '';
+
+    if (desde != '') filtro += '?desde=' + desde;
+    if (hasta != '') filtro += (filtro == '' ? '?' : '&') + 'hasta=' + hasta;
+
+    return filtro;
 }
 
-document.getElementById('form-tipo').addEventListener('submit', (e) => {
-    e.preventDefault();
-    cargarPorTipo();
-});
-document.getElementById('form-top').addEventListener('submit', (e) => {
-    e.preventDefault();
-    cargarTopClientes();
-});
-
-armarFiltroAnio();
+cargarAnios();
 cargarFacturacion();
 cargarPorTipo();
 cargarTopClientes();

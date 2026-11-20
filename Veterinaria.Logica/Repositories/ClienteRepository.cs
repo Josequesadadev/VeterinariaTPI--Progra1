@@ -5,30 +5,47 @@ using Veterinaria.Logica.Repositories.Interfaces;
 
 namespace Veterinaria.Logica.Repositories
 {
-    public class ClienteRepository : Repository<Cliente>, IClienteRepository
+    public class ClienteRepository : IClienteRepository
     {
-        private const string Collation = "Modern_Spanish_CI_AI";
+        private readonly VeterinariaDbContext db;
 
-        public ClienteRepository(VeterinariaDbContext db) : base(db) { }
-
-        public override List<Cliente> GetAll(bool incluirInactivos)
+        public ClienteRepository(VeterinariaDbContext db)
         {
-            return GetByFiltro(null, incluirInactivos);
+            this.db = db;
         }
 
-        public List<Cliente> GetByFiltro(string? texto, bool incluirInactivos)
+        public List<Cliente> GetAll(string? texto, bool incluirInactivos)
         {
-            IQueryable<Cliente> consulta = Query().Where(c => incluirInactivos || c.Activo);
+            IQueryable<Cliente> consulta = db.Clientes;
 
-            if (!string.IsNullOrWhiteSpace(texto))
+            if (!incluirInactivos)
             {
-                // Collation CI_AI: no distingue mayusculas ni acentos ("gomez" encuentra "Gómez")
-                consulta = consulta.Where(c => EF.Functions.Collate(c.Codigo, Collation).Contains(texto)
-                                            || EF.Functions.Collate(c.Nombre, Collation).Contains(texto)
-                                            || EF.Functions.Collate(c.Apellido, Collation).Contains(texto));
+                consulta = consulta.Where(c => c.Activo == true);
+            }
+
+            if (!string.IsNullOrEmpty(texto))
+            {
+                consulta = consulta.Where(c => c.Codigo.Contains(texto) || c.Nombre.Contains(texto) || c.Apellido.Contains(texto));
             }
 
             return consulta.OrderBy(c => c.Apellido).ThenBy(c => c.Nombre).ToList();
+        }
+
+        public Cliente? GetById(int id)
+        {
+            return db.Clientes.Find(id);
+        }
+
+        public void Add(Cliente cliente)
+        {
+            db.Clientes.Add(cliente);
+            db.SaveChanges();
+        }
+
+        public void Update(Cliente cliente)
+        {
+            db.Entry(cliente).State = EntityState.Modified;
+            db.SaveChanges();
         }
 
         public bool ExisteCodigo(string codigo, int idExcluir)
@@ -38,7 +55,7 @@ namespace Veterinaria.Logica.Repositories
 
         public bool TieneMascotasActivas(int idCliente)
         {
-            return db.Mascotas.Any(m => m.IdCliente == idCliente && m.Activo);
+            return db.Mascotas.Any(m => m.IdCliente == idCliente && m.Activo == true);
         }
     }
 }

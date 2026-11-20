@@ -1,36 +1,39 @@
-// Si ya tiene una sesion valida, va directo a la pagina principal
-if (sesion.estaLogueado()) {
-    window.location.href = 'principal.html';
-}
+const API_URL = 'http://localhost:5080/api';
 
-const form = document.getElementById('form-login');
-const errorLogin = document.getElementById('error-login');
-const btnIngresar = document.getElementById('btn-ingresar');
-
-form.addEventListener('submit', async (e) => {
+document.getElementById('form-login').addEventListener('submit', async (e) => {
     e.preventDefault();
-    errorLogin.classList.add('d-none');
 
-    if (!form.checkValidity()) {
-        form.classList.add('was-validated');
+    const usuario = document.getElementById('usuario').value;
+    const password = document.getElementById('password').value;
+    const error = document.getElementById('error');
+
+    if (usuario == '' || password == '') {
+        error.textContent = 'Complete el usuario y la contraseña.';
         return;
     }
 
-    btnIngresar.disabled = true;
-    btnIngresar.textContent = 'Ingresando...';
-
     try {
-        const datos = await api('/auth/login', 'POST', {
-            nombreUsuario: document.getElementById('usuario').value.trim(),
-            password: document.getElementById('password').value
+        const respuesta = await fetch(API_URL + '/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombreUsuario: usuario, password: password })
         });
-        sesion.guardar(datos);
+
+        const datos = await respuesta.json();
+
+        if (!respuesta.ok) {
+            error.textContent = datos.mensaje;
+            return;
+        }
+
+        // guardo el token para usarlo en las otras paginas
+        localStorage.setItem('token', datos.token);
+        localStorage.setItem('usuario', datos.nombreUsuario);
+        localStorage.setItem('rol', datos.rol);
+        localStorage.setItem('expira', datos.expira);
+
         window.location.href = 'principal.html';
-    } catch (error) {
-        errorLogin.textContent = error.message;
-        errorLogin.classList.remove('d-none');
-    } finally {
-        btnIngresar.disabled = false;
-        btnIngresar.textContent = 'Ingresar';
+    } catch {
+        error.textContent = 'No se pudo conectar con la API.';
     }
 });

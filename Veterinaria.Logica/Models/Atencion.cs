@@ -13,7 +13,9 @@ namespace Veterinaria.Logica.Models
         public virtual Mascota? Mascota { get; set; }
         public virtual TipoAtencion? TipoAtencion { get; set; }
 
-        public Atencion() { }
+        public Atencion()
+        {
+        }
 
         public Atencion(int id, int idMascota, int idTipoAtencion, DateTime fecha, string descripcion, decimal importe)
         {
@@ -27,35 +29,31 @@ namespace Veterinaria.Logica.Models
 
         public override void Validar()
         {
-            if (IdMascota <= 0)
+            if (IdMascota <= 0 || IdTipoAtencion <= 0)
             {
-                throw new NegocioException("Debe seleccionar la mascota.");
-            }
-            if (IdTipoAtencion <= 0)
-            {
-                throw new NegocioException("Debe seleccionar el tipo de atención.");
+                throw new NegocioException("Tiene que elegir la mascota y el tipo de atencion.");
             }
             if (string.IsNullOrWhiteSpace(Descripcion))
             {
-                throw new NegocioException("La descripción es obligatoria.");
+                throw new NegocioException("La descripcion es obligatoria.");
             }
-            if (Descripcion.Trim().Length > 255)
+            if (Descripcion.Length > 255)
             {
-                throw new NegocioException("La descripción no puede superar los 255 caracteres.");
+                throw new NegocioException("La descripcion no puede tener mas de 255 caracteres.");
             }
             if (Importe <= 0)
             {
-                throw new NegocioException("El importe debe ser mayor a 0.");
+                throw new NegocioException("El importe tiene que ser mayor a 0.");
             }
             if (Fecha.Date > DateTime.Today)
             {
-                throw new NegocioException("La fecha de la atención no puede ser futura.");
+                throw new NegocioException("La fecha no puede ser futura.");
             }
         }
 
         public override string ToString()
         {
-            return $"{Fecha:dd/MM/yyyy} - {Descripcion} - ${Importe:N2}";
+            return Fecha.ToString("dd/MM/yyyy") + " - " + Descripcion + " - $" + Importe;
         }
     }
 }

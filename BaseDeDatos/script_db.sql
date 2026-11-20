@@ -18,7 +18,7 @@ IF OBJECT_ID('dbo.TiposAtencion', 'U') IS NOT NULL DROP TABLE dbo.TiposAtencion;
 IF OBJECT_ID('dbo.Usuarios', 'U')      IS NOT NULL DROP TABLE dbo.Usuarios;
 GO
 
--- ===== Tablas =====
+-- ===== TABLAS =====
 
 CREATE TABLE dbo.Usuarios (
     id_usuario      INT IDENTITY(1,1) PRIMARY KEY,
@@ -81,9 +81,13 @@ CREATE TABLE dbo.Atenciones (
 );
 GO
 
--- ===== Datos de ejemplo =====
--- Los usuarios NO se cargan aca: la API crea los usuarios iniciales al arrancar
--- (admin / Admin123 y empleado / Empleado123) porque la contraseña se guarda con hash.
+-- ===== DATOS DE PRUEBA =====
+
+-- contraseñas: admin = Admin123, empleado = Empleado123 (guardadas con hash SHA256)
+INSERT INTO dbo.Usuarios (nombre_usuario, email, password_hash, rol) VALUES
+('admin',    'admin@veterinaria.com',    '3B612C75A7B5048A435FB6EC81E52FF92D6D795A8B5A9C17070F6A63C97A53B2', 'Admin'),
+('empleado', 'empleado@veterinaria.com', 'D90CA2B319506BC8DD4DC77B7484226D5E7524C397E1D9D419BE7A2D84B30098', 'Empleado');
+GO
 
 INSERT INTO dbo.TiposMascota (nombre) VALUES ('Perro'), ('Gato'), ('Araña'), ('Iguana');
 GO
@@ -92,29 +96,29 @@ INSERT INTO dbo.TiposAtencion (nombre) VALUES ('Consulta'), ('Tratamiento'), ('V
 GO
 
 INSERT INTO dbo.Clientes (codigo, nombre, apellido, sexo, telefono) VALUES
-('C001', 'Juan',     'Pérez',     'M', '351-1111111'),  -- 1
-('C002', 'María',    'Gómez',     'F', '351-2222222'),  -- 2
-('C003', 'Lucas',    'Fernández', 'M', '351-3333333'),  -- 3
-('C004', 'Sofía',    'López',     'F', '351-4444444'),  -- 4
-('C005', 'Martín',   'Díaz',      'M', '351-5555555'),  -- 5
-('C006', 'Valentina','Romero',    'F', '351-6666666'),  -- 6
-('C007', 'Agustín',  'Sosa',      'M', '351-7777777'),  -- 7
-('C008', 'Camila',   'Torres',    'F', '351-8888888');  -- 8
+('C001', 'Juan',     'Pérez',     'M', '351-1111111'), 
+('C002', 'María',    'Gómez',     'F', '351-2222222'), 
+('C003', 'Lucas',    'Fernández', 'M', '351-3333333'), 
+('C004', 'Sofía',    'López',     'F', '351-4444444'), 
+('C005', 'Martín',   'Díaz',      'M', '351-5555555'), 
+('C006', 'Valentina','Romero',    'F', '351-6666666'), 
+('C007', 'Agustín',  'Sosa',      'M', '351-7777777'), 
+('C008', 'Camila',   'Torres',    'F', '351-8888888'); 
 GO
 
 INSERT INTO dbo.Mascotas (nombre, edad, id_tipo_mascota, id_cliente) VALUES
-('Firulais', 5, 1, 1),  -- 1
-('Pelusa',   2, 2, 1),  -- 2
-('Michi',    3, 2, 2),  -- 3
-('Spidey',   1, 3, 3),  -- 4
-('Rex',      2, 4, 4),  -- 5
-('Toby',     7, 1, 5),  -- 6
-('Luna',     4, 2, 6),  -- 7
-('Rocky',    9, 1, 6),  -- 8
-('Coco',     1, 4, 7),  -- 9
-('Nina',     6, 1, 8),  -- 10
-('Simba',    3, 2, 8),  -- 11
-('Tarántula',2, 3, 5);  -- 12
+('Firulais', 5, 1, 1), 
+('Pelusa',   2, 2, 1), 
+('Michi',    3, 2, 2), 
+('Spidey',   1, 3, 3), 
+('Rex',      2, 4, 4), 
+('Toby',     7, 1, 5), 
+('Luna',     4, 2, 6), 
+('Rocky',    9, 1, 6), 
+('Coco',     1, 4, 7), 
+('Nina',     6, 1, 8), 
+('Simba',    3, 2, 8), 
+('Tarántula',2, 3, 5); 
 GO
 
 INSERT INTO dbo.Atenciones (id_mascota, id_tipo_atencion, fecha, descripcion, importe) VALUES

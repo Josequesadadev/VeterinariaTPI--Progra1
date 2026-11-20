@@ -15,7 +15,9 @@ namespace Veterinaria.Logica.Models
         [JsonIgnore]
         public virtual ICollection<Mascota> Mascotas { get; set; } = new List<Mascota>();
 
-        public Cliente() { }
+        public Cliente()
+        {
+        }
 
         public Cliente(int id, string codigo, string nombre, string apellido, Sexo sexo, string? telefono)
         {
@@ -27,40 +29,30 @@ namespace Veterinaria.Logica.Models
             Telefono = telefono;
         }
 
-        public string NombreCompleto => $"{Apellido}, {Nombre}";
-
         public override void Validar()
         {
             if (string.IsNullOrWhiteSpace(Codigo))
             {
-                throw new NegocioException("El código es obligatorio.");
+                throw new NegocioException("El codigo es obligatorio.");
             }
-            if (Codigo.Trim().Length > 10)
+            if (Codigo.Length > 10)
             {
-                throw new NegocioException("El código no puede superar los 10 caracteres.");
+                throw new NegocioException("El codigo no puede tener mas de 10 caracteres.");
             }
             if (string.IsNullOrWhiteSpace(Nombre) || string.IsNullOrWhiteSpace(Apellido))
             {
                 throw new NegocioException("El nombre y el apellido son obligatorios.");
             }
-            if (Nombre.Trim().Length > 50 || Apellido.Trim().Length > 50)
+            // el telefono no es obligatorio, pero si se carga tiene que ser valido
+            if (!string.IsNullOrWhiteSpace(Telefono) && !Regex.IsMatch(Telefono, @"^[0-9\- ]{6,20}$"))
             {
-                throw new NegocioException("El nombre y el apellido no pueden superar los 50 caracteres.");
-            }
-            if (!Enum.IsDefined(typeof(Sexo), Sexo))
-            {
-                throw new NegocioException("El sexo indicado no es válido.");
-            }
-            // Telefono opcional, pero si se carga: solo numeros, espacios, guiones o + (entre 6 y 20 caracteres)
-            if (!string.IsNullOrWhiteSpace(Telefono) && !Regex.IsMatch(Telefono.Trim(), @"^\+?[0-9\- ]{6,20}$"))
-            {
-                throw new NegocioException("El teléfono solo puede tener números, espacios o guiones (entre 6 y 20 caracteres).");
+                throw new NegocioException("El telefono solo puede tener numeros y guiones (entre 6 y 20 caracteres).");
             }
         }
 
         public override string ToString()
         {
-            return $"{Codigo} - {NombreCompleto}";
+            return Codigo + " - " + Apellido + ", " + Nombre;
         }
     }
 }
