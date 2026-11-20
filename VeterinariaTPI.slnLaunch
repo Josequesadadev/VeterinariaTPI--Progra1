@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "API + Web",
+    "Projects": [
+      {
+        "Path": "Veterinaria.API\\Veterinaria.API.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "Veterinaria.Web\\Veterinaria.Web.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
